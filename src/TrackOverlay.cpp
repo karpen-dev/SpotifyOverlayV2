@@ -1,4 +1,3 @@
-//
 // Created by karpen on 11/5/25.
 //
 
@@ -25,22 +24,17 @@ TrackOverlay::TrackOverlay(QWidget *parent) :
 {
     std::cout << "TrackOverlay constructor started" << std::endl;
 
-    setWindowFlags(Qt::FramelessWindowHint |
-                   Qt::WindowStaysOnTopHint |
+    setWindowFlags(Qt::WindowStaysOnTopHint |
                    Qt::Tool |
                    Qt::X11BypassWindowManagerHint);
 
-    setAttribute(Qt::WA_TranslucentBackground);
-    setAttribute(Qt::WA_ShowWithoutActivating);
+    setAttribute(Qt::WA_TranslucentBackground, false);
 
     setStyleSheet(R"(
         TrackOverlay {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(30, 30, 30, 230),
-                stop:1 rgba(20, 20, 20, 230));
+            background: #141414;
             color: white;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 50);
+            border: 1px solid #141414;
         }
     )");
 
@@ -62,11 +56,7 @@ TrackOverlay::TrackOverlay(QWidget *parent) :
     albumArtLabel->setFixedSize(64, 64);
     albumArtLabel->setStyleSheet(R"(
         QLabel {
-            border-radius: 8px;
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(60, 60, 60, 255),
-                stop:1 rgba(40, 40, 40, 255));
-            border: 1px solid rgba(255, 255, 255, 30);
+            background: #141414;
         }
     )");
     albumArtLabel->setAlignment(Qt::AlignCenter);
@@ -119,6 +109,8 @@ TrackOverlay::TrackOverlay(QWidget *parent) :
 
     setFixedSize(320, 88);
 
+    setAutoFillBackground(true);
+
     if (QApplication::primaryScreen()) {
         auto screenGeometry = QApplication::primaryScreen()->availableGeometry();
         move(screenGeometry.right() - width() - 20, 20);
@@ -167,23 +159,17 @@ void TrackOverlay::updateTrackInfo(const SpotifyTrack &track) {
     if(track.isPlaying) {
         setStyleSheet(R"(
             TrackOverlay {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 rgba(50, 90, 140, 230),
-                    stop:1 rgba(40, 70, 120, 230));
+                background: #141414;
                 color: white;
-                border-radius: 12px;
-                border: 1px solid rgba(100, 150, 255, 100);
+                border: 1px solid #141414;
             }
         )");
     } else {
         setStyleSheet(R"(
             TrackOverlay {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 rgba(30, 30, 30, 230),
-                    stop:1 rgba(20, 20, 20, 230));
+                background: #141414;
                 color: white;
-                border-radius: 12px;
-                border: 1px solid rgba(255, 255, 255, 50);
+                border: 1px solid #141414;
             }
         )");
     }
@@ -324,8 +310,6 @@ void TrackOverlay::mousePressEvent(QMouseEvent *event) {
         isDragging = true;
         dragStartPosition = event->globalPosition().toPoint() - frameGeometry().topLeft();
         event->accept();
-
-        setCursor(Qt::ClosedHandCursor);
     } else {
         QWidget::mousePressEvent(event);
     }
@@ -349,7 +333,6 @@ void TrackOverlay::mouseMoveEvent(QMouseEvent *event) {
 void TrackOverlay::mouseReleaseEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton && isDragging) {
         isDragging = false;
-        setCursor(Qt::OpenHandCursor);
         event->accept();
     } else {
         QWidget::mouseReleaseEvent(event);
@@ -357,5 +340,12 @@ void TrackOverlay::mouseReleaseEvent(QMouseEvent *event) {
 }
 
 void TrackOverlay::paintEvent(QPaintEvent *event) {
+    QPainter painter(this);
+
+
+    QPainterPath path;
+    path.addRoundedRect(rect(), 12, 12);
+    painter.fillPath(path, QColor(20, 20, 20));
+
     QWidget::paintEvent(event);
 }
