@@ -160,12 +160,6 @@ void SpotifyAPI::controlPlayback(PlayBackAction action, std::function<void(bool)
                     std::cout << "Sending previous track command" << std::endl;
                     break;
 
-                case PlayBackAction::TOGGLE:
-                    method = methods::PUT;
-                    endpoint = "/me/player/play";
-                    std::cout << "Sending play/pause toggle command" << std::endl;
-                    break;
-
                 default:
                     std::cerr << "Unknown playback action: " << static_cast<int>(action) << std::endl;
                     if (callback) callback(false);

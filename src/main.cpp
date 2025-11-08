@@ -18,6 +18,8 @@ int main(int argc, char *argv[])
     TrackOverlay overlay;
     std::cout << "Overlay created" << std::endl;
 
+    overlay.setAttribute(Qt::WA_QuitOnClose, true);
+
     overlay.show();
     std::cout << "Overlay shown" << std::endl;
 

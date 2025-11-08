@@ -10,6 +10,7 @@
 #include <QWidget>
 #include <QLabel>
 #include <QVBoxLayout>
+#include <QPushButton>
 #include <QHBoxLayout>
 #include <QApplication>
 #include <QMouseEvent>
@@ -34,23 +35,30 @@ public:
     void startPolling(int intervalSeconds = 5);
 
 protected:
-    void mousePressEvent(QMouseEvent *event) override;
-    void mouseMoveEvent(QMouseEvent *event) override;
-    void mouseReleaseEvent(QMouseEvent *event) override;
 
     void paintEvent(QPaintEvent *event);
 
 private slots:
     void onImageDownloaded(QNetworkReply* reply);
+    void setDefaultStyles() const;
 
 private:
     QLabel *albumArtLabel;
     QLabel *trackLabel;
     QLabel *artistLabel;
-    QHBoxLayout *mainLayout;
+
+    QHBoxLayout *mainLayout{};
     QVBoxLayout *textLayout;
+    QGridLayout *btnLayout;
+
+    QPushButton *playPause;
+    QPushButton *nextTrack;
+    QPushButton *backTrack;
+
     std::unique_ptr<SpotifyAPI> spotify_api_;
     QNetworkAccessManager *networkManager;
+
+    bool isPlaying{};
 
     bool isDragging = false;
     QPoint dragStartPosition;

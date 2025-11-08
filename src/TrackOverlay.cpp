@@ -1,3 +1,4 @@
+//
 // Created by karpen on 11/5/25.
 //
 
@@ -7,6 +8,7 @@
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QPixmap>
+#include <QPushButton>
 #include <QBuffer>
 #include <QPainter>
 #include <QGraphicsDropShadowEffect>
@@ -19,6 +21,10 @@ TrackOverlay::TrackOverlay(QWidget *parent) :
     trackLabel(nullptr),
     artistLabel(nullptr),
     networkManager(nullptr),
+    playPause(nullptr),
+    nextTrack(nullptr),
+    backTrack(nullptr),
+    btnLayout(nullptr),
     isDragging(false),
     dragStartPosition()
 {
@@ -28,37 +34,24 @@ TrackOverlay::TrackOverlay(QWidget *parent) :
                    Qt::Tool |
                    Qt::X11BypassWindowManagerHint);
 
-    setAttribute(Qt::WA_TranslucentBackground, false);
-
     setStyleSheet(R"(
         TrackOverlay {
             background: #141414;
             color: white;
-            border: 1px solid #141414;
         }
     )");
-
-    auto shadowEffect = new QGraphicsDropShadowEffect(this);
-    shadowEffect->setBlurRadius(20);
-    shadowEffect->setColor(QColor(0, 0, 0, 160));
-    shadowEffect->setOffset(0, 4);
-    setGraphicsEffect(shadowEffect);
 
     networkManager = new QNetworkAccessManager(this);
     connect(networkManager, &QNetworkAccessManager::finished,
             this, &TrackOverlay::onImageDownloaded);
 
     mainLayout = new QHBoxLayout(this);
-    mainLayout->setContentsMargins(12, 12, 12, 12);
+    mainLayout->setContentsMargins(2, 12, 12, 12);
     mainLayout->setSpacing(12);
 
     albumArtLabel = new QLabel(this);
     albumArtLabel->setFixedSize(64, 64);
-    albumArtLabel->setStyleSheet(R"(
-        QLabel {
-            background: #141414;
-        }
-    )");
+
     albumArtLabel->setAlignment(Qt::AlignCenter);
     albumArtLabel->setPixmap(getDefaultAlbumArt());
 
@@ -66,32 +59,16 @@ TrackOverlay::TrackOverlay(QWidget *parent) :
     textLayout->setSpacing(4);
     textLayout->setContentsMargins(0, 0, 0, 0);
 
+    btnLayout = new QGridLayout();
+    btnLayout->setSpacing(4);
+    btnLayout->setContentsMargins(0, 0, 0, 0);
+
     trackLabel = new QLabel("No track playing", this);
     artistLabel = new QLabel("--", this);
 
-    trackLabel->setStyleSheet(R"(
-        QLabel {
-            font-weight: 600;
-            font-size: 14px;
-            color: white;
-            background: transparent;
-            border: none;
-            padding: 0;
-            margin: 0;
-        }
-    )");
-
-    artistLabel->setStyleSheet(R"(
-        QLabel {
-            font-weight: 400;
-            font-size: 12px;
-            color: #b0b0b0;
-            background: transparent;
-            border: none;
-            padding: 0;
-            margin: 0;
-        }
-    )");
+    playPause = new QPushButton("⏸", this);
+    nextTrack = new QPushButton("⏵", this);
+    backTrack = new QPushButton("⏴", this);
 
     trackLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     artistLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -104,10 +81,49 @@ TrackOverlay::TrackOverlay(QWidget *parent) :
     textLayout->addWidget(artistLabel);
     textLayout->addStretch();
 
+    playPause->setMaximumWidth(30);
+    playPause->setMaximumHeight(30);
+    playPause->setHidden(true);
+
+    nextTrack->setMaximumWidth(30);
+    nextTrack->setMaximumHeight(30);
+    nextTrack->setHidden(true);
+
+    backTrack->setMaximumWidth(30);
+    backTrack->setMaximumHeight(30);
+    backTrack->setHidden(true);
+
+    btnLayout->addWidget(playPause, 0, 1);
+    btnLayout->addWidget(nextTrack, 0, 2);
+    btnLayout->addWidget(backTrack, 0, 0);
+
     mainLayout->addWidget(albumArtLabel);
     mainLayout->addLayout(textLayout);
+    mainLayout->addLayout(btnLayout);
 
-    setFixedSize(320, 88);
+    connect(playPause, &QPushButton::clicked, this, [this]() {
+        if (isPlaying) {
+            playPause->setText("⏸");
+            spotify_api_->controlPlayback(PlayBackAction::PAUSE, nullptr);
+        }
+        else {
+            playPause->setText("▶");
+
+            spotify_api_->controlPlayback(PlayBackAction::PLAY, nullptr);
+        }
+    });
+
+    connect(nextTrack, &QPushButton::clicked, this, [this]() {
+        spotify_api_->controlPlayback(PlayBackAction::NEXT, nullptr);
+    });
+
+    connect(backTrack, &QPushButton::clicked, this, [this]() {
+        spotify_api_->controlPlayback(PlayBackAction::PREVIOUS, nullptr);
+    });
+
+    setDefaultStyles();
+
+    setFixedSize(330, 88);
 
     setAutoFillBackground(true);
 
@@ -115,8 +131,6 @@ TrackOverlay::TrackOverlay(QWidget *parent) :
         auto screenGeometry = QApplication::primaryScreen()->availableGeometry();
         move(screenGeometry.right() - width() - 20, 20);
     }
-
-    setCursor(Qt::OpenHandCursor);
 
     std::cout << "TrackOverlay constructor completed" << std::endl;
 }
@@ -145,6 +159,12 @@ void TrackOverlay::updateTrackInfo(const SpotifyTrack &track) {
         artistText = artistText.left(37) + "...";
     }
 
+    isPlaying = track.isPlaying;
+
+    playPause->setHidden(false);
+    nextTrack->setHidden(false);
+    backTrack->setHidden(false);
+
     trackLabel->setText(trackText);
     artistLabel->setText(artistText);
 
@@ -157,19 +177,21 @@ void TrackOverlay::updateTrackInfo(const SpotifyTrack &track) {
     }
 
     if(track.isPlaying) {
+        playPause->setText("⏸");
+
         setStyleSheet(R"(
             TrackOverlay {
                 background: #141414;
                 color: white;
-                border: 1px solid #141414;
             }
         )");
     } else {
+        playPause->setText("▶");
+
         setStyleSheet(R"(
             TrackOverlay {
                 background: #141414;
                 color: white;
-                border: 1px solid #141414;
             }
         )");
     }
@@ -178,77 +200,6 @@ void TrackOverlay::updateTrackInfo(const SpotifyTrack &track) {
     repaint();
 
     std::cout << "=== updateTrackInfo completed ===" << std::endl;
-}
-
-void TrackOverlay::loadAlbumArt(const std::string& imageUrl) {
-    QString url = QString::fromStdString(imageUrl);
-
-    if (!url.isEmpty()) {
-        QNetworkRequest request(url);
-        request.setAttribute(QNetworkRequest::User, url);
-        networkManager->get(request);
-    } else {
-        albumArtLabel->setPixmap(getDefaultAlbumArt());
-    }
-}
-
-void TrackOverlay::onImageDownloaded(QNetworkReply* reply) {
-    std::cout << "Image download completed" << std::endl;
-
-    if (reply->error() == QNetworkReply::NoError) {
-        QByteArray imageData = reply->readAll();
-
-        QPixmap albumArt;
-        if (albumArt.loadFromData(imageData)) {
-            QPixmap roundedArt(64, 64);
-            roundedArt.fill(Qt::transparent);
-
-            QPainter painter(&roundedArt);
-            painter.setRenderHint(QPainter::Antialiasing);
-
-            QPainterPath path;
-            path.addRoundedRect(0, 0, 64, 64, 8, 8);
-            painter.setClipPath(path);
-
-            QPixmap scaledArt = albumArt.scaled(64, 64, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-            painter.drawPixmap(0, 0, scaledArt);
-
-            albumArtLabel->setPixmap(roundedArt);
-            std::cout << "Album art loaded and scaled successfully" << std::endl;
-        } else {
-            std::cerr << "Failed to load image from downloaded data" << std::endl;
-            albumArtLabel->setPixmap(getDefaultAlbumArt());
-        }
-    } else {
-        std::cerr << "Failed to download album art: " << reply->errorString().toStdString() << std::endl;
-        albumArtLabel->setPixmap(getDefaultAlbumArt());
-    }
-
-    reply->deleteLater();
-}
-
-QPixmap TrackOverlay::getDefaultAlbumArt() {
-    QPixmap defaultArt(64, 64);
-    defaultArt.fill(Qt::transparent);
-
-    QPainter painter(&defaultArt);
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    QLinearGradient gradient(0, 0, 0, 64);
-    gradient.setColorAt(0, QColor(80, 80, 80));
-    gradient.setColorAt(1, QColor(50, 50, 50));
-
-    painter.setBrush(gradient);
-    painter.setPen(QPen(QColor(120, 120, 120), 1));
-    painter.drawRoundedRect(1, 1, 62, 62, 8, 8);
-
-    painter.setPen(QPen(QColor(200, 200, 200), 2));
-    QFont font = painter.font();
-    font.setPointSize(20);
-    painter.setFont(font);
-    painter.drawText(defaultArt.rect(), Qt::AlignCenter, "♪");
-
-    return defaultArt;
 }
 
 void TrackOverlay::setAccessToken(const std::string &token) {
@@ -305,47 +256,147 @@ void TrackOverlay::startPolling(int intervalSeconds) {
     }
 }
 
-void TrackOverlay::mousePressEvent(QMouseEvent *event) {
-    if (event->button() == Qt::LeftButton) {
-        isDragging = true;
-        dragStartPosition = event->globalPosition().toPoint() - frameGeometry().topLeft();
-        event->accept();
-    } else {
-        QWidget::mousePressEvent(event);
-    }
-}
-
-void TrackOverlay::mouseMoveEvent(QMouseEvent *event) {
-    if (isDragging && (event->buttons() & Qt::LeftButton)) {
-        QPoint newPos = event->globalPosition().toPoint() - dragStartPosition;
-
-        QRect screenGeometry = QApplication::primaryScreen()->availableGeometry();
-        newPos.setX(qMax(0, qMin(newPos.x(), screenGeometry.width() - width())));
-        newPos.setY(qMax(0, qMin(newPos.y(), screenGeometry.height() - height())));
-
-        move(newPos);
-        event->accept();
-    } else {
-        QWidget::mouseMoveEvent(event);
-    }
-}
-
-void TrackOverlay::mouseReleaseEvent(QMouseEvent *event) {
-    if (event->button() == Qt::LeftButton && isDragging) {
-        isDragging = false;
-        event->accept();
-    } else {
-        QWidget::mouseReleaseEvent(event);
-    }
-}
-
 void TrackOverlay::paintEvent(QPaintEvent *event) {
     QPainter painter(this);
-
 
     QPainterPath path;
     path.addRoundedRect(rect(), 12, 12);
     painter.fillPath(path, QColor(20, 20, 20));
 
     QWidget::paintEvent(event);
+}
+
+void TrackOverlay::onImageDownloaded(QNetworkReply* reply) {
+    std::cout << "Image download completed" << std::endl;
+
+    if (reply->error() == QNetworkReply::NoError) {
+        QByteArray imageData = reply->readAll();
+
+        QPixmap albumArt;
+        if (albumArt.loadFromData(imageData)) {
+            QPixmap roundedArt(64, 64);
+            roundedArt.fill(Qt::transparent);
+
+            QPainter painter(&roundedArt);
+            painter.setRenderHint(QPainter::Antialiasing);
+
+            QPainterPath path;
+            path.addRoundedRect(0, 0, 64, 64, 8, 8);
+            painter.setClipPath(path);
+
+            QPixmap scaledArt = albumArt.scaled(64, 64, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+            painter.drawPixmap(0, 0, scaledArt);
+
+            albumArtLabel->setPixmap(roundedArt);
+            std::cout << "Album art loaded and scaled successfully" << std::endl;
+        } else {
+            std::cerr << "Failed to load image from downloaded data" << std::endl;
+            albumArtLabel->setPixmap(getDefaultAlbumArt());
+        }
+    } else {
+        std::cerr << "Failed to download album art: " << reply->errorString().toStdString() << std::endl;
+        albumArtLabel->setPixmap(getDefaultAlbumArt());
+    }
+
+    reply->deleteLater();
+}
+
+void TrackOverlay::setDefaultStyles() const {
+    albumArtLabel->setStyleSheet(R"(
+        QLabel {
+            background: #141414;
+            margin-left: 5px;
+        }
+    )");
+
+    playPause->setStyleSheet(R"(
+        QPushButton {
+            font-weight: 600;
+            font-size: 16px;
+            color: white;
+            background: transparent;
+            padding: 5px;
+            margin: 0;
+        }
+    )");
+
+    nextTrack->setStyleSheet(R"(
+        QPushButton {
+            font-weight: 600;
+            font-size: 16px;
+            color: white;
+            background: transparent;
+            padding: 5px;
+            margin: 0;
+        }
+    )");
+
+    backTrack->setStyleSheet(R"(
+        QPushButton {
+            font-weight: 600;
+            font-size: 16px;
+            color: white;
+            background: transparent;
+            padding: 5px;
+            margin: 0;
+        }
+    )");
+
+    trackLabel->setStyleSheet(R"(
+        QLabel {
+            font-weight: 600;
+            font-size: 14px;
+            color: white;
+            background: transparent;
+            padding: 0;
+            margin: 0;
+        }
+    )");
+
+    artistLabel->setStyleSheet(R"(
+        QLabel {
+            font-weight: 400;
+            font-size: 12px;
+            color: #b0b0b0;
+            background: transparent;
+            padding: 0;
+            margin: 0;
+        }
+    )");
+}
+
+void TrackOverlay::loadAlbumArt(const std::string& imageUrl) {
+    QString url = QString::fromStdString(imageUrl);
+
+    if (!url.isEmpty()) {
+        QNetworkRequest request(url);
+        request.setAttribute(QNetworkRequest::User, url);
+        networkManager->get(request);
+    } else {
+        albumArtLabel->setPixmap(getDefaultAlbumArt());
+    }
+}
+
+QPixmap TrackOverlay::getDefaultAlbumArt() {
+    QPixmap defaultArt(64, 64);
+    defaultArt.fill(Qt::transparent);
+
+    QPainter painter(&defaultArt);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    QLinearGradient gradient(0, 0, 0, 64);
+    gradient.setColorAt(0, QColor(80, 80, 80));
+    gradient.setColorAt(1, QColor(50, 50, 50));
+
+    painter.setBrush(gradient);
+    painter.setPen(QPen(QColor(120, 120, 120), 1));
+    painter.drawRoundedRect(1, 1, 62, 62, 8, 8);
+
+    painter.setPen(QPen(QColor(200, 200, 200), 2));
+    QFont font = painter.font();
+    font.setPointSize(20);
+    painter.setFont(font);
+    painter.drawText(defaultArt.rect(), Qt::AlignCenter, "♪");
+
+    return defaultArt;
 }

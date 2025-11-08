@@ -23,6 +23,7 @@ public:
     void setAccessToken(const std::string &token) const;
     void getCurrentTrack(TrackCallback success, ErrorCallback error) const;
     void stopPolling() const;
+
     void controlPlayback(PlayBackAction action, std::function<void(bool)> callback) const;
     void startPolling(std::chrono::seconds interval) const;
     void getPlaybackState(std::function<void(const SpotifyTrack &)> callback) const;
